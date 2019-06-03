@@ -1,0 +1,82 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: member-deployment
+  labels:
+    app: member
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: member
+  template:
+    metadata:
+      labels:
+        app: member
+    spec:
+      containers:
+        - name: member
+          image: gcr.io/jonghak-edu01/member:v2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MYSQL_DB_HOST
+              value: 127.0.0.1:3306
+            # These secrets are required to start the pod.
+            # [START cloudsql_secrets]
+            - name: MYSQL_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-db-credentials
+                  key: username
+            - name: MYSQL_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-db-credentials
+                  key: password
+            # [END cloudsql_secrets]
+        # Change <INSTANCE_CONNECTION_NAME> here to include your GCP
+        # project, the region of your Cloud SQL instance and the name
+        # of your Cloud SQL instance. The format is
+        # $PROJECT:$REGION:$INSTANCE
+        # [START proxy_container]
+        - name: cloudsql-proxy
+          image: gcr.io/cloudsql-docker/gce-proxy:1.14
+          command: ["/cloud_sql_proxy",
+                    "-instances=jonghak-edu01:us-central1:edu01-sql=tcp:3306",
+            # If running on a VPC, the Cloud SQL proxy can connect via Private IP. See:
+            # https://cloud.google.com/sql/docs/mysql/private-ip for more info.
+            # "-ip_address_types=PRIVATE",
+                    "-credential_file=/secrets/cloudsql/credentials.json"]
+          # [START cloudsql_security_context]
+          securityContext:
+            runAsUser: 2  # non-root user
+            allowPrivilegeEscalation: false
+          # [END cloudsql_security_context]
+          volumeMounts:
+            - name: cloudsql-instance-credentials
+              mountPath: /secrets/cloudsql
+              readOnly: true
+        # [END proxy_container]
+      # [START volumes]
+      volumes:
+        - name: cloudsql-instance-credentials
+          secret:
+            secretName: cloudsql-instance-credentials
+      # [END volumes]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: member
+  name: member-service
+  namespace: default
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: member
+  type: ClusterIP
