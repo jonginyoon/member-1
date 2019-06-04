@@ -21,6 +21,7 @@ COPY --from=builder /app/target/*.jar /app.jar
 # Service must listen to $PORT environment variable.
 # This default value facilitates local development.
 ENV PORT 8080
+ENV PROFILES k8s
 
 # Run the web service on container startup.
-CMD ["java","-Dserver.port=${PORT}","-jar","/app.jar"]
+CMD ["java","-Dserver.port=${PORT}","-Dspring.profiles.active=${PROFILES}","-jar","/app.jar"]
